@@ -42,6 +42,7 @@ class Player:
         self.vel_y = 0
         self.jump_power = -HEIGHT * 0.012
         self.gravity = HEIGHT * 0.0008
+        self.max_jumps_per_second = 5
 
     def jump(self):
         """
@@ -121,12 +122,12 @@ class Obstacle:
         previous obstacle.
         """
         self.world_x = x
-        self.width = random.randint(25, 250)
+        self.width = random.randint(25, 25)
         self.color = random.choice(COLORS)
 
         # Store the gap information
         self.gap = gap
-        self.gap_y = max(0, min(HEIGHT - gap, gap_y))  # clamp to screen
+        self.gap_y = max(0, min(HEIGHT - gap, gap_y))
 
         # Top rectangle height is gap_y
         self.r1_y = 0
@@ -186,8 +187,8 @@ class Game:
         self.world_x = 0                         
         self.obstacles = []
         self.game_over = False 
-        self.difficulty = 5
-        self.gap_difficulty = {
+        self.difficulty = 10
+        self.min_gap_difficulty = {
             1: 2,
             2: 1.8,
             3: 1.8,
@@ -200,18 +201,31 @@ class Game:
             10: 1.2,
             11: 1.1
         }
+        self.max_gap_difficulty = {
+            1: 2,
+            2: 2,
+            3: 1.9,
+            4: 1.9,
+            5: 1.8,
+            6: 1.8,
+            7: 1.7,
+            8: 1.7,
+            9: 1.6,
+            10: 1.6,
+            11: 1.5
+        }
         self.min_distance_difficulty = {
-            1: 1.0,
-            2: 1.0,
-            3: 1.0,
-            4: 1.0,
-            5: 1.0,
-            6: 1.0,
-            7: 1.0,
-            8: 1.0,
-            9: 1.0,
-            10: 1.0,
-            11: 1.0
+            1: 2.0,
+            2: 2.0,
+            3: 2.0,
+            4: 2.0,
+            5: 2.0,
+            6: 2.0,
+            7: 2.0,
+            8: 2.0,
+            9: 2.0,
+            10: 2.0,
+            11: 2.0
         }
         self.max_distance_difficulty = {
             1: 10.0,
@@ -265,13 +279,87 @@ class Game:
                 elif self.game_over and event.key == pygame.K_r:
                     self.reset_game()
 
+    def calculate_gap_height(self):
+        v0 = self.player.jump_power
+        t_up = -v0 / self.player.gravity
+        rise = abs(v0 * t_up + 0.5 * self.player.gravity  * (t_up**2))
+        min_gap = int(((self.player.radius * 2) + rise) * 1.5)
+        max_gap = min_gap 
+        return random.randint(min_gap, max_gap)
+        
+    def calculate_spawn_distance(self):
+        # Compute the distance a player travels in one jump
+        vel_y = self.player.jump_power
+        y = 0
+        frames = 0
+        while True:
+            y += vel_y
+            vel_y += self.player.gravity
+            frames += 1
+            if y >= 0:  
+                break
+        jump_distance_x = (frames*self.speed)
+        min_dist = int(jump_distance_x / 2 + self.player.radius * 2)
+        max_dist = int(jump_distance_x * 1.5 + self.player.radius * 2)
+        return min_dist, max_dist, random.randint(min_dist, max_dist) 
+    
+    def calculate_max_height_increase(self, x):
+        """
+        Compute the maximum vertical height the player can reach while moving horizontally
+        toward the next obstacle, based on jump power, gravity, and number of frames available.
+        
+        :param horizontal_distance: Distance to the next obstacle (pixels)
+        :return: Maximum height increase (positive number, pixels)
+        """
+        frames = math.floor(x / self.speed)
+        frames_per_jump = math.floor(FPS / self.player.max_jumps_per_second)
+        v = 0
+        y = 0
+        max_increase = 0
+        for i in range(frames):
+            if i % frames_per_jump == 0:
+                v += self.player.jump_power
+            v += self.player.gravity
+            y += v
+            if y < max_increase:
+                max_increase = y
+        return -max_increase
+
+    def calculate_max_height_decrease(self, x):
+        """
+        Compute the maximum vertical fall distance the player can reach while moving
+        horizontally toward the next obstacle.
+        
+        :param horizontal_distance: Distance to the next obstacle (pixels)
+        :return: Maximum fall distance (positive number, pixels)
+        """
+        frames = math.floor(x / self.speed)
+        v = 0
+        y = 0
+        for i in range(frames):
+            v += self.player.gravity 
+            y += v
+        max_decrease = max(0, y)
+        return max_decrease
+
+    def calculate_gap_position(self, y0, x_distance, gap_height):
+        """
+        Given the distance to the next obstacle, calculate the lowest position 
+        for the start of the next gap and the highest position for the start of
+        the next gap, then choose a random value between the two heights
+        """
+        max_inc = self.calculate_max_height_increase(x_distance) # POSITIVE DECREASE IN HEIGHT
+        max_dec = self.calculate_max_height_decrease(x_distance) # POSITIVE INCREASE IN HEIGHT
+        highest_gap_position = math.floor(max(0, y0 - max_inc))
+        lowest_gap_position = math.ceil(min(HEIGHT-gap_height, y0 + max_dec))
+        gap_position = random.randint(highest_gap_position, lowest_gap_position)
+        return highest_gap_position, lowest_gap_position, gap_position
+    
     def spawn_obstacle(self):
         """
         Spawn a new obstacle with a gap that is reachable based on player physics
         and previous obstacle position.
         """
-        # ======================================================================
-        # Get information about the previous obstacle to help create the new one
 
         if not self.obstacles:
             prev_gap_y = HEIGHT // 2
@@ -283,76 +371,18 @@ class Game:
             last_obstacle_x = prev_obstacle.world_x
             last_obstacle_width = prev_obstacle.width
 
-        # ======================================================================
-        # Determine the height of the gap for the new obstacle
+        # Step 1: Determine spawn distance
+        min_spawn_distance, max_spawn_distance, spawn_distance_random = self.calculate_spawn_distance()
+        spawn_x = (last_obstacle_x + last_obstacle_width + min_spawn_distance)
 
-        # Calculate the maximum vertical distance that the player can move upward during a jump
-        v0 = self.player.jump_power
-        t_up = -v0 / self.player.gravity 
-        rise = abs(v0 * t_up + 0.5 * self.player.gravity  * (t_up**2))
+        # Step 2: Chooe teh gap height 
+        gap_height = self.calculate_gap_height()
 
-        # Determine the smallest gap that the player can jump through
-        min_gap = math.ceil((self.player.radius*2) + rise * self.gap_difficulty[self.difficulty])
+        # Step 4: Choose the gap position
+        gap_y_position_highest, gap_y_position_lowest, gap_y_position_random = self.calculate_gap_position(prev_gap_y, min_spawn_distance, gap_height)
+                           
 
-        # Determine the largest gap allowed in the game
-        max_gap = int(min_gap * 2)
-
-        # Choose the height of the gap
-        gap = random.randint(min_gap, max_gap)
-
-        # ======================================================================
-        # Determine the position of the new obstacle
-
-        min_spawn_distance = int(int(self.player.radius*2) * self.min_distance_difficulty[self.difficulty])
-        max_spawn_distance = int(min_spawn_distance * self.max_distance_difficulty[self.difficulty])
-        spawn_distance = random.randint(min_spawn_distance, max_spawn_distance)
-
-        spawn_x = last_obstacle_x + last_obstacle_width + spawn_distance
-
-        # Calculate the horizontal distance (in pixels) to the next obstacle
-        dx = spawn_x - (last_obstacle_x + last_obstacle_width)
-
-        # Calculate the number of frames until the next obstacle reaches the player
-        frames_until_next_obstacle = dx / self.speed 
-
-        # ======================================================================
-        # Determine the the lowest possible position for the new gap that the player could fall to
-
-        # Calculate the lowest possible position for the new gap that the player could reach if falling
-        max_fall_distance = (1/2) * self.player.gravity * (frames_until_next_obstacle ** 2)
-        lowest_gap_y = min(prev_gap_y + max_fall_distance, HEIGHT - gap)
-
-        # ======================================================================
-        # Determine the highest possible position for the new gap that the player could jump to
-
-        jump_rate_per_sec = 4
-        frames_between_jumps = FPS / jump_rate_per_sec
-        vel = 0
-        y_rise = 0
-        frames = int(frames_until_next_obstacle)
-        for f in range(frames):
-            if f % int(frames_between_jumps) == 0:
-                vel += self.player.jump_power
-            vel += self.player.gravity
-            y_rise -= vel 
-        highest_gap_y = max(0, prev_gap_y - y_rise)
-
-        # ======================================================================
-        # Determine the position of the new gap
-
-        # Determine the position of hte next gap
-        low = int(lowest_gap_y)
-        high = int(highest_gap_y)
-        if low > high:
-            low, high = high, low 
-        gap_y = random.randint(low, high)
-        gap_y = random.choice([low, high])
-
-
-        # ======================================================================
-        # Create the new obstacle 
-
-        self.obstacles.append(Obstacle(spawn_x, gap, gap_y))
+        self.obstacles.append(Obstacle(spawn_x, gap_height, gap_y_position_random))
 
     def update_world(self):
         """
