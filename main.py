@@ -2,21 +2,23 @@ import pygame
 import random
 import math
 
-# Dimensions for the game, player, etc.
+# ------------------------------
+# Game Constants
+# ------------------------------
 WIDTH, HEIGHT = 700, 1000
 PLAYER_RADIUS = int(HEIGHT * 0.01)
-
 FPS = 60
 COLORS = [
-    (0, 0, 255),        # Blue
-    (0, 255, 0),        # Green
-    (255, 0, 0),        # Red
-    (255, 255, 0),      # Yellow
-    (255, 165, 0),      # Orange
-    (128, 0, 128),      # Purple
-    (0, 255, 255),      # Cyan
-    (255, 192, 203),    # Pink
+    (0, 0, 255),       # Blue
+    (0, 255, 0),       # Green
+    (255, 0, 0),       # Red
+    (255, 255, 0),     # Yellow
+    (255, 165, 0),     # Orange
+    (128, 0, 128),     # Purple
+    (0, 255, 255),     # Cyan
+    (255, 192, 203),   # Pink
 ]
+
 # ---------------------------------------------
 # Player class
 # ---------------------------------------------
@@ -24,16 +26,16 @@ class Player:
 
     def __init__(self):
         """
-        Initialize the player obj with a default position, color, radius, and physical properties (e.g. velocity, gravity,
-        and jump power)
+        Initialize the player obj with a default position, color, radius, and physical properties
 
-        :attr x (int): The horizontal position of the player relative to the screen
-        :attr y (float): The vertical position of the player relative to the screen
-        :attr radius (int): The radius of the player's circle
-        :attr color (tuple): The RGB color of the player
-        :attr vel_y (float): The current velcity of player (positive vals move player down, negative vals move player up)
-        :attr jump_power (float): The vertical velcity applied instantly when player jumps (negative so player moves down)
-        :attr gravity (float): The acceleration applied downwards each frame
+        :attr x (float): Horizontal position of the player relative to the screen.
+        :attr y (float): Vertical position of the player relative to the screen.
+        :attr radius (int): Radius of the player's circle.
+        :attr color (tuple[int, int, int]): RGB color of the player.
+        :attr vel_y (float): Current vertical velocity (positive = downward).
+        :attr jump_power (float): Vertical velocity applied when player jumps (negative = upward).
+        :attr gravity (float): Acceleration applied downward each frame.
+        :attr max_jumps_per_second (int): Maximum number of jumps allowed per second.
         """
         self.x = WIDTH * 0.25       
         self.y = HEIGHT * 0.5     
@@ -46,50 +48,28 @@ class Player:
 
     def jump(self):
         """
-        Makes the player jump by setting the vertical velcoity to the jump power.
-        The player will move upward in the next frames due to negative velocity
+        Apply vertical jump velocity to the player.
         """
         self.vel_y = self.jump_power
 
     def update_position(self):
         """
-        Updates the players vertical position based on physics - i.e. apply gravity
-        to the vertical velocity to bring the player downward, update the players 
-        vertical position, and handle collisions with the ground and ceiling
+        Update the player's vertical position using velocity and gravity, and handle ground collision.
         """
-        # Apply physics
         self.vel_y += self.gravity
         self.y += self.vel_y
-
-        # Ground collision
         if self.y >= (HEIGHT - self.radius):
             self.y = (HEIGHT - self.radius)
             self.vel_y = 0
 
     def draw(self, screen):
+        """
+        Draw the player as a circle on the screen.
+
+        :param screen (pygame.Surface): Pygame surface to draw the player on.
+        """
         pygame.draw.circle(screen, self.color, (self.x, int(self.y)), self.radius)
 
-
-    def get_max_rise(self):
-        """
-        Calculate the maximum vertical distance the player can move upward 
-        during a jump, based on current jump power and gravity.
-        
-        :return: Maximum upward displacement (float)
-        """
-        v0 = self.jump_power
-        t_up = -v0 / self.gravity 
-        rise = abs(v0 * t_up + 0.5 * self.gravity * t_up**2)
-        return rise
-    
-    def get_min_gap(self):
-        """
-        Calculate the smallest possible gap that the player can jump through an survive
-        """
-        # compute maximum jump height (rise)
-        rise = self.get_max_rise()
-        # compute smallest safe gap the player can jump through
-        return math.ceil((self.radius * 2) + rise)
 
     
 # ---------------------------------------------
@@ -97,35 +77,28 @@ class Player:
 # ---------------------------------------------
 class Obstacle:
 
-    def __init__(self, x, gap, gap_y):
+    def __init__(self, x, gap, gap_y, width):
         """
-        Initialize an obstacle in the game world with a specified vertical gap.
+        Initialize an obstacle with top and bottom rectangles and a vertical gap.
 
-        :param x: The horizontal position of the obstacle in the world.
-        :param gap: The vertical size of the gap between the top and bottom parts of the obstacle.
-        :param gap_y: The vertical position (y-coordinate) of the top edge of the gap. 
-                    This determines where the player can pass through. It is automatically 
-                    clamped so that the gap stays fully on-screen.
+        :param world_x: Horizontal position of the obstacle in the world.
+        :param gap_height: Vertical height of the gap the player must pass through.
+        :param gap_y: Y-coordinate of the top of the gap.
+        :param width: Width of the obstacle.
 
-        :attr world_x (int): Horizontal position of the obstacle in the world.
-        :attr width (int): Width of the obstacle (randomly chosen within a range).
-        :attr color (tuple): RGB color of the obstacle.
-        :attr gap (int): Size of the vertical gap between the top and bottom rectangles.
-        :attr gap_y (int): Y-coordinate of the top of the gap (clamped to stay on-screen).
-        :attr r1_y (int): Y-coordinate of the top rectangle (always 0, fills space above gap).
-        :attr r1_height (int): Height of the top rectangle (equals gap_y).
-        :attr r2_y (int): Y-coordinate of the bottom rectangle (starts at gap_y + gap).
-        :attr r2_height (int): Height of the bottom rectangle (fills remaining space below gap).
-
-        The `gap_y` attribute is key for controlling the vertical position of the gap so that 
-        it is reachable by the player based on physics (jump height) and distance from the 
-        previous obstacle.
+        :attr world_x (float): Horizontal position of the obstacle in the world.
+        :attr width (int): Width of the obstacle.
+        :attr color (tuple[int, int, int]): RGB color of the obstacle.
+        :attr gap (int): Height of the gap between top and bottom rectangles.
+        :attr gap_y (float): Y-coordinate of the top of the gap (clamped to screen bounds).
+        :attr r1_y (int): Top rectangle Y-coordinate (always 0).
+        :attr r1_height (int): Height of the top rectangle (gap_y).
+        :attr r2_y (int): Bottom rectangle Y-coordinate (gap_y + gap_height).
+        :attr r2_height (int): Height of the bottom rectangle (fills remaining screen height).
         """
         self.world_x = x
-        self.width = random.randint(25, 25)
+        self.width = width
         self.color = random.choice(COLORS)
-
-        # Store the gap information
         self.gap = gap
         self.gap_y = max(0, min(HEIGHT - gap, gap_y))
 
@@ -137,22 +110,21 @@ class Obstacle:
         self.r2_y = self.gap_y + gap
         self.r2_height = HEIGHT - self.r2_y
 
-    def get_screen_x(self, world_x):
+    def get_screen_x(self, world_offset):
         """
-        Calculate the obstacles x position relative to the screen using world current
-        x coordinate and the obstacles x coordinate in the world
+        Convert world X-coordinate to screen X-coordinate.
 
-        :param world_x: The current x coordinate of the world
-        :return (int): The x coordinate of the obstacle on the screen
-        """     
-        return self.world_x - world_x
+        :param world_offset (float): Current horizontal scroll of the world.
+        :return (float): Screen X-coordinate of the obstacle.
+        """
+        return self.world_x - world_offset
 
     def draw(self, screen, x):
         """
-        Draw the obstacles top and bottom parts on the screen
+        Draw the top and bottom rectangles of the obstacle.
 
-        :param screen (pygame.Surface): The pygame surface to draw on
-        :param x (int): The obstacles x coordinate relative to the screen
+        :param screen (pygame.Surface): Pygame surface to draw on.
+        :param x (float): Screen X-coordinate of the obstacle.
         """
         pygame.draw.rect(screen, self.color, (x, self.r1_y, self.width, self.r1_height))
         pygame.draw.rect(screen, self.color, (x, self.r2_y, self.width, self.r2_height))
@@ -165,104 +137,64 @@ class Game:
         """
         Initialize the game, create the window, player, obstacles, and other settings.
 
-        :attr screen (pygame.Surface): The game window
-        :attr player (Player): The player instance
-        :attr clock (pygame.time.Clock): Clock to manage frames per second
-        :attr running (bool): Determines whether the game loop is active
-        :attr speed (int): The rate at which the world moves leftward
-        :attr world_x (int): Horizontal offset of the world relative to the screen
-        :attr min_spawn_distance (int): Minimum horizontal spacing between obstacles
-        :attr max_spawn_distance (int): Maximum horizontal spacing between obstacles
-        :attr obstacles (list): List of active obstacles in the world
-        :attr game_over (bool): true when the game is over
+        :attr screen (pygame.Surface): The game window.
+        :attr player (Player): The player instance.
+        :attr clock (pygame.time.Clock): Clock to manage frames per second.
+        :attr running (bool): Determines whether the game loop is active.
+        :attr speed (int): The rate at which the world moves leftward.
+        :attr world_x (float): Horizontal offset of the world relative to the screen.
+        :attr obstacles (list): List of active obstacles in the world.
+        :attr game_over (bool): True when the game is over.
         """
         pygame.init()
         pygame.display.set_caption("Ryans World")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-
-        self.player = Player()              
-        self.clock = pygame.time.Clock()    
-        self.running = True                 
-        self.speed = 2                      
-        self.world_x = 0                         
+        self.player = Player()
+        self.clock = pygame.time.Clock()
+        self.running = True
+        self.speed = 2
+        self.world_x = 0
         self.obstacles = []
-        self.game_over = False 
-        self.difficulty = 10
-        self.min_gap_difficulty = {
-            1: 2,
-            2: 1.8,
-            3: 1.8,
-            4: 1.7,
-            5: 1.7,
-            6: 1.6,
-            7: 1.5,
-            8: 1.3,
-            9: 1.3,
-            10: 1.2,
-            11: 1.1
-        }
-        self.max_gap_difficulty = {
-            1: 2,
-            2: 2,
-            3: 1.9,
-            4: 1.9,
-            5: 1.8,
-            6: 1.8,
-            7: 1.7,
-            8: 1.7,
-            9: 1.6,
-            10: 1.6,
-            11: 1.5
-        }
-        self.min_distance_difficulty = {
-            1: 2.0,
-            2: 2.0,
-            3: 2.0,
-            4: 2.0,
-            5: 2.0,
-            6: 2.0,
-            7: 2.0,
-            8: 2.0,
-            9: 2.0,
-            10: 2.0,
-            11: 2.0
-        }
-        self.max_distance_difficulty = {
-            1: 10.0,
-            2: 9.0,
-            3: 8.0,
-            4: 7.0,
-            5: 6.0,
-            6: 5.0,
-            7: 4.0,
-            8: 3.0,
-            9: 2.0,
-            10: 1.0,
-            11: 0.0
-        }
+        self.game_over = False
 
+    def get_jump_height(self):
+        """
+        Compute the maximum vertical height of a jump based on player's jump power and gravity.
+
+        :return (float): Maximum jump height in pixels.
+        """
+        v0 = abs(self.player.jump_power)
+        g = self.player.gravity
+        h = (v0 * v0) / (2 * g)
+        return h
+    
+    def get_jump_distance(self):
+        """
+        Compute the maximum horizontal distance the player can travel during a jump.
+
+        :return (float): Maximum horizontal distance in pixels.
+        """
+        v0 = abs(self.player.jump_power)
+        g = self.player.gravity
+        airtime = 2 * v0 / g
+        vx = self.speed
+        return vx * airtime
 
     def collision(self):
         """
-        Determines if the player has collided with any obstacle in the game world.
-        This checks collisions between the player's circular shape and both the
-        top and bottom rectangles of each obstacle using proper circle-rectangle
-        collision detection.
+        Check if the player collides with any obstacle.
 
-        :return (bool): True if the player collides with any obstacle, False otherwise.
+        :return (bool): True if collision occurs, False otherwise.
         """
         for o in self.obstacles:
             x = o.get_screen_x(self.world_x)
-            # Check collision with top and bottom rectangles
             for ry, rh in [(o.r1_y, o.r1_height), (o.r2_y, o.r2_height)]:
-                # Find closest point on rectangle to player center
                 closest_x = max(x, min(self.player.x, x + o.width))
                 closest_y = max(ry, min(self.player.y, ry + rh))
-                # Distance from circle center to closest point
                 dx = self.player.x - closest_x
                 dy = self.player.y - closest_y
                 if dx * dx + dy * dy < self.player.radius * self.player.radius:
-                    return True  
+                    return True
         return False
             
     def handle_events(self):
@@ -279,29 +211,38 @@ class Game:
                 elif self.game_over and event.key == pygame.K_r:
                     self.reset_game()
 
+    def calculate_obstacle_width(self):
+        """
+        Calculate the width of the next obstacle based off player radius and jump distance.
+
+        :return (int): Width in pixels.
+        """
+        jump_distance = int(self.get_jump_distance())
+        min_width = int(self.player.radius)
+        max_width = jump_distance * 3
+        return min_width, max_width, random.randint(min_width, max_width)
+
     def calculate_gap_height(self):
-        v0 = self.player.jump_power
-        t_up = -v0 / self.player.gravity
-        rise = abs(v0 * t_up + 0.5 * self.player.gravity  * (t_up**2))
-        min_gap = int(((self.player.radius * 2) + rise) * 1.5)
-        max_gap = min_gap 
-        return random.randint(min_gap, max_gap)
-        
+        """
+        Calculate the height of the next obstacle's gap based off player radius and jump height.
+
+        :return (int): Gap height in pixels.
+        """
+        y_max = self.get_jump_height()
+        min_gap = int(((self.player.radius * 2) + y_max) * 1.1)
+        max_gap = int(min_gap * 3)
+        return min_gap, max_gap, random.randint(min_gap, max_gap)
+
     def calculate_spawn_distance(self):
-        # Compute the distance a player travels in one jump
-        vel_y = self.player.jump_power
-        y = 0
-        frames = 0
-        while True:
-            y += vel_y
-            vel_y += self.player.gravity
-            frames += 1
-            if y >= 0:  
-                break
-        jump_distance_x = (frames*self.speed)
-        min_dist = int(jump_distance_x / 2 + self.player.radius * 2)
-        max_dist = int(jump_distance_x * 1.5 + self.player.radius * 2)
-        return min_dist, max_dist, random.randint(min_dist, max_dist) 
+        """
+        Compute the distance a player travels in one jump for obstacle spawning based off player radius and jump distance
+
+        :return (tuple[int, int, int]): Minimum distance, maximum distance, random distance.
+        """
+        jump_distance_x = self.get_jump_distance()
+        min_dist = int(jump_distance_x + self.player.radius * 2)
+        max_dist = int(min_dist * 4)
+        return min_dist, max_dist, random.randint(min_dist, max_dist)
     
     def calculate_max_height_increase(self, x):
         """
@@ -328,39 +269,43 @@ class Game:
     def calculate_max_height_decrease(self, x):
         """
         Compute the maximum vertical fall distance the player can reach while moving
-        horizontally toward the next obstacle.
+        horizontally toward the next obstacle IF they jump from the edge of the most 
+        recent obstacle
         
         :param horizontal_distance: Distance to the next obstacle (pixels)
         :return: Maximum fall distance (positive number, pixels)
         """
         frames = math.floor(x / self.speed)
-        v = 0
+        v = self.player.jump_power # jump from edge of last ubstacle
         y = 0
         for i in range(frames):
             v += self.player.gravity 
             y += v
         max_decrease = max(0, y)
         return max_decrease
-
+    
     def calculate_gap_position(self, y0, x_distance, gap_height):
         """
-        Given the distance to the next obstacle, calculate the lowest position 
-        for the start of the next gap and the highest position for the start of
-        the next gap, then choose a random value between the two heights
+        Calculate the Y-position of the next obstacle's gap based on player physics.
+
+        :param y0 (float): Y-coordinate of the previous obstacle's gap.
+        :param x_distance (float): Horizontal distance to the next obstacle.
+        :param gap_height (int): Height of the gap.
+        :return (tuple[int, int, int]): Highest gap Y, lowest gap Y, random chosen gap Y.
         """
-        max_inc = self.calculate_max_height_increase(x_distance) # POSITIVE DECREASE IN HEIGHT
-        max_dec = self.calculate_max_height_decrease(x_distance) # POSITIVE INCREASE IN HEIGHT
+        max_inc = self.calculate_max_height_increase(x_distance)
+        max_dec = self.calculate_max_height_decrease(x_distance)
         highest_gap_position = math.floor(max(0, y0 - max_inc))
-        lowest_gap_position = math.ceil(min(HEIGHT-gap_height, y0 + max_dec))
+        lowest_gap_position = math.ceil(min(HEIGHT - gap_height, y0 + max_dec))
         gap_position = random.randint(highest_gap_position, lowest_gap_position)
         return highest_gap_position, lowest_gap_position, gap_position
     
     def spawn_obstacle(self):
         """
-        Spawn a new obstacle with a gap that is reachable based on player physics
-        and previous obstacle position.
-        """
+        Spawn a new obstacle with a gap reachable by the player.
 
+        :return: None
+        """
         if not self.obstacles:
             prev_gap_y = HEIGHT // 2
             last_obstacle_x = WIDTH * 0.6
@@ -371,24 +316,26 @@ class Game:
             last_obstacle_x = prev_obstacle.world_x
             last_obstacle_width = prev_obstacle.width
 
-        # Step 1: Determine spawn distance
-        min_spawn_distance, max_spawn_distance, spawn_distance_random = self.calculate_spawn_distance()
-        spawn_x = (last_obstacle_x + last_obstacle_width + min_spawn_distance)
+        min_spawn_distance, max_spawn_distance, rand_spawn_distance = self.calculate_spawn_distance()
+        d = rand_spawn_distance
+        min_gap_height, max_gap_height, rand_gap_height = self.calculate_gap_height()
+        h = rand_gap_height
+        min_gap_position, max_gap_position, rand_gap_position = self.calculate_gap_position(prev_gap_y, d, h)
+        y = rand_gap_position
+        min_obstacle_width, max_obstacle_width, rand_obstacle_width = self.calculate_obstacle_width()
+        w = rand_obstacle_width
 
-        # Step 2: Chooe teh gap height 
-        gap_height = self.calculate_gap_height()
+        x = last_obstacle_x + last_obstacle_width + d
 
-        # Step 4: Choose the gap position
-        gap_y_position_highest, gap_y_position_lowest, gap_y_position_random = self.calculate_gap_position(prev_gap_y, min_spawn_distance, gap_height)
-                           
-
-        self.obstacles.append(Obstacle(spawn_x, gap_height, gap_y_position_random))
+        if self.obstacles:
+            self.obstacles.append(Obstacle(x, h, y, w))
+        else:
+            self.obstacles.append(Obstacle(x, h, 0, w))
 
     def update_world(self):
         """
-        Update the game world for the current frame by moving the world leftware to
-        simulate forward movement, spawning new obstacles, updating the players position, 
-        and removing obstacles that are no longer on the screen
+        Update the game world: move world, spawn obstacles, update player, remove off-screen obstacles,
+        and check for collisions.
         """
         if self.game_over:
             return 
@@ -412,26 +359,16 @@ class Game:
 
     def draw_world(self):
         """
-        Draws the current state of the game world by clearnign the screen, drawing the 
-        player and all the obstacles, and updating the dipslay to show the new frame
+        Draw the current state of the game world including player, obstacles, and game over screen.
         """
-        # Draw the background
         self.screen.fill((0, 0, 0))
-
-        # Draw the player
         self.player.draw(self.screen)
-
-        # Draw the obstacles
         for o in self.obstacles:
             o.draw(self.screen, o.get_screen_x(self.world_x))
 
         if self.game_over:
             font = pygame.font.SysFont("Courier", 48, bold=True)
-            lines = [
-                "Game Over!",
-                "YOU FUCKING SUCK.",
-                "Press R to Restart"
-            ]
+            lines = ["Game Over!", "YOU FUCKING SUCK.", "Press R to Restart"]
             total_height = len(lines) * font.get_linesize()
             start_y = HEIGHT // 2 - total_height // 2
             for i, line in enumerate(lines):
@@ -439,7 +376,6 @@ class Game:
                 rect = text_surf.get_rect(center=(WIDTH // 2, start_y + i * font.get_linesize()))
                 self.screen.blit(text_surf, rect)
 
-        # Update the screen 
         pygame.display.update()
 
     def reset_game(self):
